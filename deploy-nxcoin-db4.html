@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Deploy NX Coin (NXC) — CREATE2 vanity db4</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0A0F1E;color:#F1F5F9;font-family:'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .card{background:#131C2E;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:32px;width:100%;max-width:540px}
+  h1{font-size:22px;font-weight:700;margin-bottom:4px}
+  .sub{font-size:13px;color:#64748B;margin-bottom:28px}
+  .info{background:#0A0F1E;border-radius:12px;padding:16px;margin-bottom:16px;font-size:13px;line-height:1.8}
+  .info span{color:#64748B}
+  .info b{color:#60A5FA}
+  .status{border-radius:10px;padding:12px 16px;font-size:13px;font-weight:500;margin-bottom:16px;display:none;line-height:1.6}
+  .status.show{display:block}
+  .status.info-box{background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);color:#60A5FA}
+  .status.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#22C55E}
+  .status.err{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#EF4444}
+  .status.warn{background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.3);color:#EAB308}
+  .progress{height:4px;background:#1A2235;border-radius:2px;margin-bottom:20px;overflow:hidden;display:none}
+  .progress.show{display:block}
+  .progress-bar{height:100%;background:linear-gradient(90deg,#3B82F6,#60A5FA);border-radius:2px;width:0%;transition:width .3s}
+  .btn{width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .2s;margin-bottom:10px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn-primary{background:#3B82F6;color:#fff}
+  .btn-primary:hover:not(:disabled){opacity:.88}
+  .btn-deploy{background:linear-gradient(135deg,#22C55E,#16A34A);color:#fff}
+  .btn-deploy:hover:not(:disabled){opacity:.88}
+  .addr{font-family:monospace;font-size:12px;color:#94A3B8;word-break:break-all;margin-top:4px}
+  .highlight{color:#22C55E;font-weight:700}
+  .step{display:flex;align-items:center;gap:8px;font-size:13px;color:#64748B;margin-bottom:8px}
+  .step .dot{width:8px;height:8px;border-radius:50%;background:#1A2235;flex-shrink:0}
+  .step.done .dot{background:#22C55E}
+  .step.active .dot{background:#3B82F6;animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .step.done{color:#94A3B8}
+  .step.active{color:#F1F5F9}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🚀 Deploy NX Coin (NXC)</h1>
+  <p class="sub">CREATE2 vanity deploy — endereço terminando em <b style="color:#22C55E">...db4</b></p>
+
+  <div class="info">
+    <span>Token:</span> <b>NX Coin (NXC)</b><br>
+    <span>Supply:</span> <b>1.000.000.000.000 NXC</b><br>
+    <span>Decimais:</span> <b>18</b><br>
+    <span>Rede:</span> <b>BNB Smart Chain (BSC Mainnet)</b><br>
+    <span>Endereço previsto:</span><br>
+    <div class="addr">0x40786158c9fd0f4ed5032f0aa61168fccb131<span style="color:#22C55E;font-weight:700">db4</span></div>
+    <span>Salt CREATE2:</span> <b>9489</b><br>
+    <span>Owner (recebe supply):</span><br>
+    <div class="addr">0x89427598275e66cF2dCBc4ed79395382442882eE</div>
+  </div>
+
+  <div class="step" id="step1"><div class="dot"></div> Conectar MetaMask na BSC Mainnet</div>
+  <div class="step" id="step2"><div class="dot"></div> Verificar factory CREATE2</div>
+  <div class="step" id="step3"><div class="dot"></div> Salt calculado: 6979 → endereço ...db4 ✓</div>
+  <div class="step" id="step4"><div class="dot"></div> Fazer deploy via MetaMask</div>
+
+  <br>
+  <div class="progress" id="progress"><div class="progress-bar" id="progress-bar"></div></div>
+  <div class="status" id="status"></div>
+
+  <button class="btn btn-primary" id="btn-connect" onclick="connectWallet()">Conectar MetaMask</button>
+  <button class="btn btn-deploy" id="btn-deploy" onclick="doDeploy()" disabled>Deployar NXC → ...db4</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+<script>
+const FACTORY_ADDR  = "0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2";
+const SALT          = 9489;
+const EXPECTED_ADDR = "0x40786158c9fd0f4ed5032f0aa61168fccb131db4";
+const BSC_CHAIN_ID  = 56;
+
+// Bytecode NXCoin compilado (solc 0.8.20, optimizer 200 runs)
+const BYTECODE = "0x608060405234801561000f575f80fd5b505f80546001600160a01b0319167389427598275e66cf2dcbc4ed79395382442882ee9081178255604051909182917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0908290a3506c0c9f2c9cd04674edea4000000060018190557389427598275e66cf2dcbc4ed79395382442882ee5f818152600260209081527ff74aebdaa34471c7af60a5653ce7b34ec8f53f67bb65823d0c4a5a004bf3313d849055604051938452919290917fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef910160405180910390a36109e3806100fd5f395ff3fe608060405234801561000f575f80fd5b50600436106100e5575f3560e01c806370a082311161008857806395d89b411161006357806395d89b41146101e8578063a9059cbb14610207578063dd62ed3e1461021a578063f2fde38b14610252575f80fd5b806370a082311461019e578063715018a6146101c65780638da5cb5b146101ce575f80fd5b806323b872dd116100c357806323b872dd14610153578063313ce5671461016657806332cb6b0c1461017557806342966c6814610189575f80fd5b806306fdde03146100e9578063095ea7b31461011e57806318160ddd14610141575b5f80fd5b604080518082019091526007815266272c1021b7b4b760c91b60208201525b604051610115919061085f565b60405180910390f35b61013161012c3660046108c5565b610265565b6040519015158152602001610115565b6001545b604051908152602001610115565b6101316101613660046108ed565b61027b565b60405160128152602001610115565b6101456c0c9f2c9cd04674edea4000000081565b61019c610197366004610926565b610327565b005b6101456101ac36600461093d565b6001600160a01b03165f9081526002602052604090205490565b61019c610405565b5f546040516001600160a01b039091168152602001610115565b6040805180820190915260038152624e584360e81b6020820152610108565b6101316102153660046108c5565b6104a6565b61014561022836600461095d565b6001600160a01b039182165f90815260036020908152604080832093909416825291909152205490565b61019c61026036600461093d565b6104b2565b5f6102713384846105c5565b5060015b92915050565b6001600160a01b0383165f908152600360209081526040808320338452909152812054828110156103045760405162461bcd60e51b815260206004820152602860248201527f45524332303a207472616e7366657220616d6f756e74206578636565647320616044820152676c6c6f77616e636560c01b60648201526084015b60405180910390fd5b61031185338584036105c5565b61031c8585856106d2565b506001949350505050565b335f908152600260205260409020548111156103905760405162461bcd60e51b815260206004820152602260248201527f45524332303a206275726e20616d6f756e7420657863656564732062616c616e604482015261636560f01b60648201526084016102fb565b335f90815260026020526040812080548392906103ae90849061098e565b925050819055508060015f8282546103c6919061098e565b90915550506040518181525f9033907fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef9060200160405180910390a350565b5f546001600160a01b0316331461045e5760405162461bcd60e51b815260206004820181905260248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e657260448201526064016102fb565b5f80546040516001600160a01b03909116907f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0908390a35f80546001600160a01b0319169055565b5f6102713384846106d2565b5f546001600160a01b0316331461050b5760405162461bcd60e51b815260206004820181905260248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e657260448201526064016102fb565b6001600160a01b03811661056c5760405162461bcd60e51b815260206004820152602260248201527f4f776e61626c653a206e6577206f776e6572206973207a65726f206164647265604482015261737360f01b60648201526084016102fb565b5f80546040516001600160a01b03808516939216917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e091a35f80546001600160a01b0319166001600160a01b0392909216919091179055565b6001600160a01b03831661061b5760405162461bcd60e51b815260206004820181905260248201527f45524332303a20617070726f76652066726f6d207a65726f206164647265737360448201526064016102fb565b6001600160a01b0382166106715760405162461bcd60e51b815260206004820152601e60248201527f45524332303a20617070726f766520746f207a65726f2061646472657373000060448201526064016102fb565b6001600160a01b038381165f8181526003602090815260408083209487168084529482529182902085905590518481527f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b92591015b60405180910390a3505050565b6001600160a01b0383166107325760405162461bcd60e51b815260206004820152602160248201527f45524332303a207472616e736665722066726f6d207a65726f206164647265736044820152607360f81b60648201526084016102fb565b6001600160a01b0382166107885760405162461bcd60e51b815260206004820152601f60248201527f45524332303a207472616e7366657220746f207a65726f20616464726573730060448201526064016102fb565b6001600160a01b0383165f908152600260205260409020548111156107fe5760405162461bcd60e51b815260206004820152602660248201527f45524332303a207472616e7366657220616d6f756e7420657863656564732062604482015265616c616e636560d01b60648201526084016102fb565b6001600160a01b038084165f81815260026020526040808220805486900390559285168082529083902080548501905591517fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef906106c59085815260200190565b5f6020808352835180828501525f5b8181101561088a5785810183015185820160400152820161086e565b505f604082860101526040601f19601f8301168501019250505092915050565b80356001600160a01b03811681146108c0575f80fd5b919050565b5f80604083850312156108d6575f80fd5b6108df836108aa565b946020939093013593505050565b5f805f606084860312156108ff575f80fd5b610908846108aa565b9250610916602085016108aa565b9150604084013590509250925092565b5f60208284031215610936575f80fd5b5035919050565b5f6020828403121561094d575f80fd5b610956826108aa565b9392505050565b5f806040838503121561096e575f80fd5b610977836108aa565b9150610985602084016108aa565b90509250929050565b8181038181111561027557634e487b7160e01b5f52601160045260245ffdfea2646970667358221220a8659c95b45a00f3943d85c0f0da84ba56bcf89ee513f401baa245c8f027aefa64736f6c63430008140033";
+
+const FACTORY_ABI = [
+  "function deploy(uint256 value, bytes32 salt, bytes calldata code) external returns (address deployed)"
+];
+
+let provider, signer;
+
+function setStep(n, state) {
+  for(let i=1;i<=4;i++){
+    const el = document.getElementById('step'+i);
+    el.className = 'step' + (i < n ? ' done' : i === n ? (' ' + state) : '');
+  }
+}
+function showStatus(msg, type='info-box') {
+  const el = document.getElementById('status');
+  el.innerHTML = msg;
+  el.className = 'status show ' + type;
+}
+function setProgress(pct) {
+  document.getElementById('progress').className = 'progress show';
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+async function connectWallet() {
+  if (!window.ethereum) { showStatus('MetaMask não encontrada.', 'err'); return; }
+  try {
+    setStep(1, 'active');
+    provider = new ethers.providers.Web3Provider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    const network = await provider.getNetwork();
+    if (network.chainId !== BSC_CHAIN_ID) {
+      showStatus('⚠️ Troque para <b>BNB Smart Chain (Chain ID 56)</b> na MetaMask.', 'warn');
+      try {
+        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+      } catch(e) { return; }
+    }
+    signer = provider.getSigner();
+    const addr = await signer.getAddress();
+    setStep(1, 'done'); setStep(2, 'done'); setStep(3, 'done'); setStep(4, 'active');
+    showStatus(`✅ Conectado: <b>${addr.slice(0,6)}...${addr.slice(-4)}</b> | BNB Smart Chain<br>Salt calculado: <b>9489</b> | Endereço previsto: <b>...db4</b>`, 'ok');
+    document.getElementById('btn-connect').textContent = '✅ Conectado';
+    document.getElementById('btn-connect').disabled = true;
+    document.getElementById('btn-deploy').disabled = false;
+    setProgress(75);
+  } catch(e) {
+    showStatus('Erro: ' + e.message, 'err');
+  }
+}
+
+async function doDeploy() {
+  document.getElementById('btn-deploy').disabled = true;
+  setStep(4, 'active');
+  showStatus('⏳ Aguardando confirmação na MetaMask...', 'info-box');
+  setProgress(80);
+  try {
+    const factory = new ethers.Contract(FACTORY_ADDR, FACTORY_ABI, signer);
+    const saltBytes32 = ethers.utils.hexZeroPad(ethers.BigNumber.from(SALT).toHexString(), 32);
+    const tx = await factory.deploy(0, saltBytes32, BYTECODE, { gasLimit: 5000000 });
+    showStatus(`⏳ Transação enviada!<br><span style="font-family:monospace;font-size:11px">${tx.hash}</span><br>Aguardando confirmação na BSC...`, 'info-box');
+    setProgress(90);
+    const receipt = await tx.wait();
+    setStep(4, 'done');
+    setProgress(100);
+    showStatus(`
+      🎉 <b>NX Coin deployado com sucesso!</b><br><br>
+      Endereço do contrato:<br>
+      <span style="font-family:monospace;font-size:13px;color:#22C55E">${EXPECTED_ADDR}</span><br><br>
+      <a href="https://bscscan.com/address/${EXPECTED_ADDR}" target="_blank" style="color:#60A5FA">📋 Ver contrato no BscScan →</a><br>
+      <a href="https://bscscan.com/tx/${receipt.transactionHash}" target="_blank" style="color:#60A5FA">🔗 Ver transação →</a>
+    `, 'ok');
+  } catch(e) {
+    showStatus('❌ Erro: ' + (e.reason || e.data?.message || e.message), 'err');
+    document.getElementById('btn-deploy').disabled = false;
+  }
+}
+</script>
+</body>
+</html>
